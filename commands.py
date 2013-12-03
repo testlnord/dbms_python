@@ -20,10 +20,5 @@ class Insert():
         self.db = db
 
     def run(self):
-        print ("insert into "+self.name)
-        print ("FIELDS")
-        for field in self.fields:
-            print (field)
-        print ("VALUES")
-        for val in self.values:
-            print (val)
+        command = {'fields': [j for x in self.fields for j in x.values()], 'values': self.values, 'name': self.name}
+        self.db.insert(command)
