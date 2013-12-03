@@ -12,6 +12,16 @@ class CreateTable():
         self.db.add({'name': self.name, 'fields': self.fields})
 
 
+class Select():
+    def __init__(self, db):
+        self.db = db
+        self.name = ''
+        self.fields = []
+
+    def run(self):
+        self.db.select(self.name, self.fields)
+
+
 class Insert():
     def __init__(self, db):
         self.name = ''

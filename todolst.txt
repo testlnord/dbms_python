@@ -9,3 +9,10 @@
 
 insert into example
 (id) values (2);
+
+create table my_table(
+int id1,
+int id2,
+varchar(10) ss);
+Table MY_TABLE created.
+insert into my_table (id1,id2) values (1,2)

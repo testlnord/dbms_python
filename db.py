@@ -26,6 +26,7 @@ class db:
             for ti in range(table_count):
                 table = {}
                 table['name'] = db_file.readline().strip()
+                table['start'] = int(db_file.readline().strip())
                 table['fields'] = []
                 field_count = int(db_file.readline())
                 for fi in range(field_count):
@@ -52,7 +53,17 @@ class db:
         return fmt
 
     def add(self,table):
+        page_free = self.memman.allocate_page()
+        table['start'] = page_free.number
+        page_busy = self.memman.allocate_page()
+        page_data = self.memman.allocate_page()
+        page_free = mm.DataPage(page_free, 'I')
+        page_free.write([page_data.number])
+        page_busy.clean = False
+        page_data.clean = False
+        table['fmt'] = db._make_fmt(table['fields'])
         self.tables.append(table)
+        print("Table %s created." %table['name'])
 
     def insert(self, command):
         self.current_table = {}
@@ -62,7 +73,11 @@ class db:
         if self.current_table == {}:
             raise ValueError
 
-        page1 = self.memman.get_page(0)
+        page_free = self.memman.get_page(self.current_table['start'])
+        #page_busy = self.memman.get_page(self.current_table['start'] + 1)
+        page_free = mm.DataPage(page_free, 'I')
+        page_num = page_free.next()
+        page1 = self.memman.get_page(page_num[0])
         table_page = mm.DataPage(page1, self.current_table['fmt'])
         data = []
         for f in self.current_table['fields']:
@@ -78,13 +93,40 @@ class db:
                 val = bytes(val, 'utf8')
             data.append(val)
 
-        table_page.write((data))
+        table_page.write(data)
+
+    def select(self, table_name, fields):
+        self.current_table = {}
+        for tab in self.tables:
+            if tab['name'] == table_name:
+                self.current_table = tab
+        if self.current_table == {}:
+            raise ValueError
+
+        page_free = self.memman.get_page(self.current_table['start'])
+        page_busy = self.memman.get_page(self.current_table['start']+1)
+        page_free = mm.DataPage(page_free, 'I')
+        page_busy = mm.DataPage(page_busy, 'I')
+
+        for page_num in page_free:
+            page = self.memman.get_page(page_num[0])
+            page = mm.DataPage(page, self.current_table['fmt'])
+            for val in page:
+                print(val)
+                #todo add printing in right format
+        for page_num in page_busy:
+            page = self.memman.get_page(page_num[0])
+            page = mm.DataPage(page, self.current_table['fmt'])
+            for val in page:
+                print(val)
+
 
     def save(self):
         with open(self.path, 'w') as db_file:
             db_file.write(str(len(self.tables))+'\n')
             for table in self.tables:
                 db_file.write(table['name'] + '\n')
+                db_file.write(str(table['start']) + '\n')
                 db_file.write(str(len(table['fields']))+'\n')
                 for field in table['fields']:
                     db_file.write(field['name']+' '+field['type'])

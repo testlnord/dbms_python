@@ -14,6 +14,7 @@ reg = re.compile("(\.|,|\)|\(|;)", flags=re.U)
 spaces = re.compile("\s")
 create_flag = False
 insert_flag = False
+select_flag = False
 fields_flag = False
 values_flag = False
 size_flag = False
@@ -34,16 +35,22 @@ while not exit_flag:
             continue
         word = word.upper()
         #commands
-        if word == 'CREATE':
-            create_flag= True
-            continue
+        if not select_flag and not insert_flag and not create_flag:
+            if word == 'CREATE':
+                create_flag= True
+                continue
+            if word == 'INSERT':
+                insert_flag = True
+                continue
+            if word == 'SELECT':
+                select_flag = True
+                continue
+
         if word == 'TABLE' and create_flag:
             create_flag = False
             command = commands.CreateTable(db)
             continue
-        if word == 'INSERT':
-            insert_flag = True
-            continue
+
         if word == 'INTO' and insert_flag:
             insert_flag = False
             command = commands.Insert(db)
@@ -111,4 +118,7 @@ while not exit_flag:
         if not fields_flag and not fields_flag:
             command.name = word
             continue
+command = commands.Select(db)
+command.name = 'MY_TABLE'
+command.run()
 db.close()
