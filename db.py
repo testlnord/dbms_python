@@ -94,6 +94,7 @@ class db:
             data.append(val)
 
         table_page.write(data)
+        print("1 row(s) affected.") #todo write proper output
 
     def select(self, table_name, fields):
         self.current_table = {}

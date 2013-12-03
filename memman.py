@@ -40,34 +40,46 @@ class DataPage():
         count = Memman.page_size // self.struct_size - 1
         self.data_offset = count//8+1;
         self.bitmask = bitarray.bitarray()
-        self.bitmask.frombytes(self.page._buffer[0:self.data_offset])
+        self.bitmask.frombytes(bytes(self.page._buffer[0:self.data_offset]))
         self.free_pos = 0
 
         self.cur_non_free = -1
+        self.iterator_pos = -1
         for pos, bit in enumerate(self.bitmask):
             if bit:
                 self.cur_non_free = pos
 
 
     def next_free(self):
+        self.free_pos += 1
         while self.bitmask[self.free_pos]:
             self.free_pos += 1
         return self.free_pos
 
     def __iter__(self):
+        for pos, bit in enumerate(self.bitmask):
+            if bit:
+                self.iterator_pos = pos
+                break
         return self
 
     def __next__(self):
-        if self.cur_non_free == -1:
+        if self.iterator_pos == -1:
             raise StopIteration
-        return self.next()
+        old_pos = self.iterator_pos
+        self.iterator_pos = -1
+        for pos, bit in enumerate(self.bitmask[old_pos+1:], start=old_pos+1):
+            if bit:
+                self.iterator_pos = pos
+                break
+        return self.read(old_pos)
 
     def next(self):
         if self.cur_non_free == -1:
             raise StopIteration
         old_non_free = self.cur_non_free
         self.cur_non_free = -1
-        for pos, bit in enumerate(self.bitmask[old_non_free+1:]):
+        for pos, bit in enumerate(self.bitmask[old_non_free+1:], start=old_non_free+1):
             if bit:
                 self.cur_non_free = pos
         return self.read(old_non_free)
@@ -83,7 +95,7 @@ class DataPage():
         struct.pack_into(self.fmt, (self.page._buffer), self.data_offset + pos*self.struct_size,*data)
         self.page.clean = False
 
-#(c_char * Memman.page_size).from_buffer
+
 class Memman:
     page_size = 4096
     max_pages = 20
@@ -115,8 +127,8 @@ class Memman:
                         break
 
             self.file.seek(Memman.page_size * page_number)
-            buffer = (self.file.read(Memman.page_size))
-
+            buffer = bytearray(self.file.read(Memman.page_size))
+            print(type(buffer))
             #buffer = (bytearray(Memman.page_size))
             if len(buffer) == 0:
                 buffer = bytearray(Memman.page_size)

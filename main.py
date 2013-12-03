@@ -44,7 +44,27 @@ while not exit_flag:
                 continue
             if word == 'SELECT':
                 select_flag = True
+                fields_flag = True
+                command = commands.Select(db)
                 continue
+
+        if select_flag:
+            if fields_flag:
+                if word == '*':
+                    command.fields = []
+                if word == 'FROM':
+                    fields_flag = False
+                else:
+                    command.fields.append(word)
+                continue
+            elif word == ';':
+                command.run()
+                select_flag = False
+
+            else:
+                command.name = word
+
+            continue
 
         if word == 'TABLE' and create_flag:
             create_flag = False
@@ -118,7 +138,5 @@ while not exit_flag:
         if not fields_flag and not fields_flag:
             command.name = word
             continue
-command = commands.Select(db)
-command.name = 'MY_TABLE'
-command.run()
+
 db.close()
