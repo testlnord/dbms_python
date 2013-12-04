@@ -11,9 +11,24 @@ class Page:
     def __init__(self, buffer, number):
         self._buffer = buffer
         self.clean = True
-        self._busy = True
+        self.busy = True
         self._type = 0
         self.number = number
+
+    @property
+    def next_page(self):
+        return struct.unpack_from('i', self._buffer[0:4])
+    @next_page.setter
+    def next_page(self, value):
+        struct.pack_into('i',self._buffer[0:4],0,value)
+    @property
+    def prev_page(self):
+        return struct.unpack_from('i', self._buffer[4:8])
+    @prev_page.setter
+    def next_page(self, value):
+        struct.pack_into('i',self._buffer[4:8],0,value)
+
+
 
     def get_buffer(self):
         return self._buffer
@@ -37,10 +52,11 @@ class DataPage():
         self.fmt = fmt
         self.page = page
         self.struct_size = struct.calcsize(fmt)
+
         count = Memman.page_size // self.struct_size - 1
-        self.data_offset = count//8+1;
+        self.data_offset = count//8 + 1 + 8  # 8 = page_next + page_prev
         self.bitmask = bitarray.bitarray()
-        self.bitmask.frombytes(bytes(self.page._buffer[0:self.data_offset]))
+        self.bitmask.frombytes(bytes(self.page._buffer[8:self.data_offset]))
         self.free_pos = 0
 
         self.cur_non_free = -1
@@ -82,7 +98,8 @@ class DataPage():
         for pos, bit in enumerate(self.bitmask[old_non_free+1:], start=old_non_free+1):
             if bit:
                 self.cur_non_free = pos
-        return self.read(old_non_free)
+                break
+        return self.read(old_non_free), old_non_free
 
     def read(self, pos):
         return struct.unpack_from(self.fmt, self.page._buffer, self.data_offset + pos*self.struct_size)
@@ -91,8 +108,16 @@ class DataPage():
         if pos is None:
             pos = self.next_free()
         self.bitmask[pos] = True
-        self.page._buffer[0:self.data_offset] = self.bitmask.tobytes()
-        struct.pack_into(self.fmt, (self.page._buffer), self.data_offset + pos*self.struct_size,*data)
+        self.page._buffer[8:self.data_offset] = self.bitmask.tobytes()
+        if Memman.page_size - (self.data_offset + pos*self.struct_size) < self.struct_size:
+            raise MemoryError #todo make normal exception
+        struct.pack_into(self.fmt, (self.page._buffer), self.data_offset + pos*self.struct_size, *data)
+        self.page.clean = False
+        #return pos
+
+    def delete(self, pos):
+        self.bitmask[pos] = True
+        self.page._buffer[8:self.data_offset] = self.bitmask.tobytes()
         self.page.clean = False
 
 
@@ -102,46 +127,54 @@ class Memman:
 
     def __init__(self, path):
         self.pages = {}
+        self.page_usages = {}
 
         try:
             self.file = open(path, 'r+b')
 
         except IOError:
-            tf = open(path, 'w')
+            tf = open(path, 'wb')
+            nothing = bytearray(Memman.page_size)
+            tf.write(nothing)
             tf.close()
             self.file = open(path, 'r+b')
 
         self.file.seek(0, io.SEEK_END)
         self.max_pages_in_file = self.file.tell() // Memman.page_size
         self.file.seek(0, io.SEEK_SET)
+        self.max_pages_in_file = 10
         self.deal_page = self.get_page(0)
 
-    def get_page(self, page_number):
+    def get_page(self, page_number=None):
         if not page_number in self.pages.keys():
-            if len(self.pages) == Memman.max_pages:
-                #todo lru
+            if len(self.pages) >= Memman.max_pages:
+                min_usages = -1
                 for page in self.pages:
                     if not self.pages[page].busy:
-                        self.write_page(page)
-                        del self.pages[page]
-                        break
+                        if min_usages == -1:
+                            min_usages = page
+                            continue
+                        if self.page_usages[min_usages] > self.page_usages[page]:
+                            min_usages = page
+                if min_usages > -1:
+                    self.write_page(page)
+                    del self.pages[page]
+                    del self.page_usages[page]
+            if page_number is None:
+                page_number = self.max_pages_in_file
+                self.max_pages_in_file += 1
 
             self.file.seek(Memman.page_size * page_number)
             buffer = bytearray(self.file.read(Memman.page_size))
-            print(type(buffer))
-            #buffer = (bytearray(Memman.page_size))
-            if len(buffer) == 0:
+            if len(buffer) < Memman.page_size:
                 buffer = bytearray(Memman.page_size)
             self.pages[page_number] = Page(buffer, page_number)
+            self.page_usages[page_number] = 0
+        self.page_usages[page_number] += 1
         return self.pages[page_number]
 
     def allocate_page(self):
-        #todo: add checking for max_page_count
-        buffer = bytearray(Memman.page_size)
-        page_num = self.max_pages_in_file
-        self.max_pages_in_file += 1
-        self.pages[page_num] = Page(buffer, page_num)
-        return self.pages[page_num]
+        return self.get_page()
 
     def deallocate_page(self, page):
         pass

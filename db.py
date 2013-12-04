@@ -11,8 +11,6 @@ class db:
     def __init__(self, path):
         self.tables = []
         self.memman = mm.Memman(path+'db')
-
-
         #len = struct.unpack('i',page1.buffer[0:4])[0]
         #b = bitarray(page1.buffer[4:len//8+5])
         #page1.clean = False
@@ -20,6 +18,12 @@ class db:
         #page1.clean = False
         #page3 = self.memman.get_page(2)
         #page3.clean = False
+        try:
+            with open(path,'r'):
+               pass
+        except IOError:
+            with open(path,'w') as f:
+                f.write("0\n")
 
         with open(path,'r') as db_file:
             table_count = int(db_file.readline())
@@ -64,6 +68,22 @@ class db:
         table['fmt'] = db._make_fmt(table['fields'])
         self.tables.append(table)
         print("Table %s created." %table['name'])
+        page_busy.busy = False
+        page_free.page.busy = False
+        page_data.busy = False
+
+    def safe_write(self, page, data, pos=None):
+        try:
+            page.write(data, pos)
+            return True
+        except MemoryError:
+            new_page = self.memman.allocate_page()
+            new_page.next_page = page.page.next_page
+            new_page.prev_page = page.page.number
+            page.page.next_page = new_page.number
+            page.page.busy = False
+            page.page = new_page
+            return False
 
     def insert(self, command):
         self.current_table = {}
@@ -71,12 +91,13 @@ class db:
             if tab['name'] == command['name']:
                 self.current_table = tab
         if self.current_table == {}:
+            #todo make my own exception and avoid crashes
             raise ValueError
 
         page_free = self.memman.get_page(self.current_table['start'])
         #page_busy = self.memman.get_page(self.current_table['start'] + 1)
         page_free = mm.DataPage(page_free, 'I')
-        page_num = page_free.next()
+        page_num, free_record_num = page_free.next()
         page1 = self.memman.get_page(page_num[0])
         table_page = mm.DataPage(page1, self.current_table['fmt'])
         data = []
@@ -93,8 +114,20 @@ class db:
                 val = bytes(val, 'utf8')
             data.append(val)
 
-        table_page.write(data)
+        if not self.safe_write(table_page,data):
+            page_busy = self.memman.get_page(self.current_table['start'] + 1)
+            page_busy = mm.DataPage(page_busy, 'I')
+            page_free.delete(free_record_num)
+            self.safe_write(page_busy,[table_page.page.number])
+            page_free.write([table_page.page.number])
+            page_busy.busy = False
+
+        table_page.page.busy = False
+        page_free.page.busy = False
+
         print("1 row(s) affected.") #todo write proper output
+
+
 
     def select(self, table_name, fields):
         self.current_table = {}
@@ -112,15 +145,25 @@ class db:
         for page_num in page_free:
             page = self.memman.get_page(page_num[0])
             page = mm.DataPage(page, self.current_table['fmt'])
-            for val in page:
-                print(val)
-                #todo add printing in right format
+            try:
+                for val in page:
+                    print(val)
+                    #todo add printing in right format
+            except struct.error:
+                pass
+            page.page.busy = False
+        page_free.page.busy = False
+
         for page_num in page_busy:
             page = self.memman.get_page(page_num[0])
             page = mm.DataPage(page, self.current_table['fmt'])
-            for val in page:
-                print(val)
-
+            try:
+                for val in page:
+                    print(val)
+            except struct.error:
+                pass
+            page.page.busy = False
+        page_busy.page.busy = False
 
     def save(self):
         with open(self.path, 'w') as db_file:

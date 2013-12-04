@@ -6,7 +6,6 @@ import sys
 import re
 import commands
 import db
-db_file = open("db.txt", 'r+b')  # open(sys.args[1],'r+b')
 
 db = db.db("db.txt")
 
@@ -99,8 +98,8 @@ while not exit_flag:
             fields_flag = False
             continue
         if word == ')' and not fields_flag and values_flag:
-            command.values.append(value)
-            value = ''
+            command.values.append(value) #todo avoid values capitalization
+            value = ''                  #todo remove kavychkas in strings
             values_flag= False
             continue
         if word == ';':
@@ -129,6 +128,7 @@ while not exit_flag:
         if not fields_flag and values_flag:
             value = word
             continue
+        #todo fix float point parsing
         if fields_flag and not size_flag:
             if word in ['INT', 'DOUBLE', 'VARCHAR']:
                 field['type'] = word
