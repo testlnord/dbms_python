@@ -17,15 +17,18 @@ class Page:
 
     @property
     def next_page(self):
-        return struct.unpack_from('i', self._buffer[0:4])
+        return struct.unpack_from('i', self._buffer[0:4])[0]
+
     @next_page.setter
     def next_page(self, value):
         struct.pack_into('i',self._buffer[0:4],0,value)
+
     @property
     def prev_page(self):
-        return struct.unpack_from('i', self._buffer[4:8])
+        return struct.unpack_from('i', self._buffer[4:8])[0]
+
     @prev_page.setter
-    def next_page(self, value):
+    def prev_page(self, value):
         struct.pack_into('i',self._buffer[4:8],0,value)
 
 
@@ -52,9 +55,11 @@ class DataPage():
         self.fmt = fmt
         self.page = page
         self.struct_size = struct.calcsize(fmt)
+        self.reset()
 
+    def reset(self):
         count = Memman.page_size // self.struct_size - 1
-        self.data_offset = count//8 + 1 + 8  # 8 = page_next + page_prev
+        self.data_offset = (count//8) + 1 + 8  # 8 = page_next + page_prev
         self.bitmask = bitarray.bitarray()
         self.bitmask.frombytes(bytes(self.page._buffer[8:self.data_offset]))
         self.free_pos = 0
@@ -68,8 +73,11 @@ class DataPage():
 
     def next_free(self):
         self.free_pos += 1
-        while self.bitmask[self.free_pos]:
-            self.free_pos += 1
+        try:
+            while self.bitmask[self.free_pos]:
+                self.free_pos += 1
+        except IndexError:
+            raise MemoryError #todo change exception
         return self.free_pos
 
     def __iter__(self):
@@ -107,16 +115,16 @@ class DataPage():
     def write(self, data, pos = None):
         if pos is None:
             pos = self.next_free()
-        self.bitmask[pos] = True
-        self.page._buffer[8:self.data_offset] = self.bitmask.tobytes()
         if Memman.page_size - (self.data_offset + pos*self.struct_size) < self.struct_size:
             raise MemoryError #todo make normal exception
+        self.bitmask[pos] = True
+        self.page._buffer[8:self.data_offset] = self.bitmask.tobytes()
         struct.pack_into(self.fmt, (self.page._buffer), self.data_offset + pos*self.struct_size, *data)
         self.page.clean = False
         #return pos
 
     def delete(self, pos):
-        self.bitmask[pos] = True
+        self.bitmask[pos] = False
         self.page._buffer[8:self.data_offset] = self.bitmask.tobytes()
         self.page.clean = False
 

@@ -83,6 +83,7 @@ class db:
             page.page.next_page = new_page.number
             page.page.busy = False
             page.page = new_page
+            page.reset()
             return False
 
     def insert(self, command):
@@ -103,7 +104,7 @@ class db:
         data = []
         for f in self.current_table['fields']:
             if f['name'] in command['fields']:
-                val = command['values'][ command['fields'].index(f['name'])]
+                val = command['values'][command['fields'].index(f['name'])]
             else:
                 val = '0'
             if f['type'] == 'INT':
@@ -113,13 +114,13 @@ class db:
             else:
                 val = bytes(val, 'utf8')
             data.append(val)
-
+        old_page_num = table_page.page.number
         if not self.safe_write(table_page,data):
             page_busy = self.memman.get_page(self.current_table['start'] + 1)
             page_busy = mm.DataPage(page_busy, 'I')
             page_free.delete(free_record_num)
-            self.safe_write(page_busy,[table_page.page.number])
-            page_free.write([table_page.page.number])
+            self.safe_write(page_busy,[old_page_num])
+            self.safe_write(page_free,[table_page.page.number])
             page_busy.busy = False
 
         table_page.page.busy = False
@@ -141,28 +142,46 @@ class db:
         page_busy = self.memman.get_page(self.current_table['start']+1)
         page_free = mm.DataPage(page_free, 'I')
         page_busy = mm.DataPage(page_busy, 'I')
-
-        for page_num in page_free:
-            page = self.memman.get_page(page_num[0])
-            page = mm.DataPage(page, self.current_table['fmt'])
-            try:
-                for val in page:
-                    print(val)
-                    #todo add printing in right format
-            except struct.error:
-                pass
-            page.page.busy = False
+        while True:
+            for page_num in page_free:
+                page = self.memman.get_page(page_num[0])
+                page = mm.DataPage(page, self.current_table['fmt'])
+                try:
+                    for val in page:
+                        print(val)
+                        #todo add printing in right format
+                except struct.error:
+                    pass
+                page.page.busy = False
+            if page_free.page.next_page == 0:
+                break
+            else:
+                new_page = self.memman.get_page(page_free.page.next_page)
+                page_free.page.busy = False
+                page_free.page = new_page
+                page_free.reset()
         page_free.page.busy = False
 
-        for page_num in page_busy:
-            page = self.memman.get_page(page_num[0])
-            page = mm.DataPage(page, self.current_table['fmt'])
-            try:
-                for val in page:
-                    print(val)
-            except struct.error:
-                pass
-            page.page.busy = False
+        while True:
+            for page_num in page_busy:
+                #if page_num[0] > 200:
+                #    print ("======================\n  PANIC %s PANIC \n===================="%(page_num[0]))
+                #    continue#break
+                page = self.memman.get_page(page_num[0])
+                page = mm.DataPage(page, self.current_table['fmt'])
+                try:
+                    for val in page:
+                        print(val)
+                except struct.error:
+                    pass
+
+            if page_busy.page.next_page == 0:
+                break
+            else:
+                new_page = mm.DataPage(db.memman.get_page(page_busy.page.next_page),'I')
+                page_busy.page.busy = False
+                page_busy.page = new_page
+                page_busy.reset()
         page_busy.page.busy = False
 
     def save(self):
