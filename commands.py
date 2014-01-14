@@ -30,5 +30,26 @@ class Insert():
         self.db = db
 
     def run(self):
-        command = {'fields': [j for x in self.fields for j in x.values()], 'values': self.values, 'name': self.name}
+        #command = {'fields': [j for x in self.fields for j in x.values()], 'values': self.values, 'name': self.name}
+        command = {'fields': self.fields, 'values': self.values, 'name': self.name}
         self.db.insert(command)
+
+
+class Delete():
+    def __init__(self, db):
+        self.name = ''
+        self.db = db
+
+    def run(self):
+        self.db.delete(self.name)
+
+class Update():
+    def __init__(self, db):
+        self.name = ''
+        self.fields = []
+        self.values = []
+        self.db = db
+
+    def run(self):
+
+        raise NotImplemented

@@ -3,6 +3,8 @@ import re
 import commands
 import db
 import os
+import random
+
 
 try:
     os.remove("test.txt")
@@ -16,11 +18,11 @@ com.name = 'TEST'
 com.fields = [{'type': 'INT', 'name': 'D1'}, {'type': 'VARCHAR', 'name': 'SS', 'size': '20'}]
 com.run()
 
-for i in range(1000000):
+for i in range(1000):
     com = commands.Insert( db)
     com.name = 'TEST'
-    com.fields = [{'name': 'D1'}, {'name': 'SS'}]
-    com.values = [str(i), 'ASDFGAGadsfasdfddef23fef']
+    com.fields = ['D1',  'SS']
+    com.values = [random.randint(1,1000), 'ASDFGAGadsfasdfddef23fef']
     com.run()
 
 com = commands.Select(db)
